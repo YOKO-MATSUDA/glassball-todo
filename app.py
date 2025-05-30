@@ -1,11 +1,13 @@
 from flask import Flask, render_template, request, redirect, url_for
 import sqlite3
-from datetime import datetime
-# 日本時間のタイムゾーン定義
+from datetime import datetime, timedelta, timezone
+
+# 日本時間（UTC+9）
 JST = timezone(timedelta(hours=9))
 
-# 現在時刻（日本時間）を取得
+# 日本時間の現在時刻を取得
 now = datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
+
 
 app = Flask(__name__)
 DB_NAME = "todo.db"
@@ -77,11 +79,8 @@ def add():
     task = request.form["task"]
     category_id = request.form.get("category_id")
     if task:
-        # UTC → JSTに修正
-        from datetime import datetime, timedelta, timezone
-        JST = timezone(timedelta(hours=9))
+        JST = timezone(timedelta(hours=9))  # 日本時間設定
         now = datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
-
         conn = get_db_connection()
         conn.execute(
             "INSERT INTO tasks (content, created_at, category_id) VALUES (?, ?, ?)",
@@ -90,6 +89,7 @@ def add():
         conn.commit()
         conn.close()
     return redirect(url_for("index"))
+
 
 
 @app.route("/delete/<int:task_id>")
