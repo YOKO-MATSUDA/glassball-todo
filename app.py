@@ -1,24 +1,46 @@
-from flask import Flask, render_template, request, redirect, url_for
+import os
+from functools import wraps
+from flask import Flask, render_template, request, redirect, url_for, Response
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
 # 日本時間（UTC+9）
 JST = timezone(timedelta(hours=9))
 
-# 日本時間の現在時刻を取得
-now = datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
-
-
 app = Flask(__name__)
+
+# Renderの環境変数からIDとパスワードを取得
+USERNAME = os.environ.get("BASIC_AUTH_USERNAME")
+PASSWORD = os.environ.get("BASIC_AUTH_PASSWORD")
+
+def check_auth(username, password):
+    return username == USERNAME and password == PASSWORD
+
+def authenticate():
+    return Response(
+        '認証が必要です。IDとパスワードを入力してください。', 401,
+        {'WWW-Authenticate': 'Basic realm="Login Required"'}
+    )
+
+def requires_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.authorization
+        if not auth or not check_auth(auth.username, auth.password):
+            return authenticate()
+        return f(*args, **kwargs)
+    return decorated
+
+# 以下は既存のDB設定・関数
+
 DB_NAME = "todo.db"
 
-# ✅ カテゴリごとの色設定（関数よりも前に置く）
 CATEGORY_COLORS = {
-    "仕事": "primary",     # 青
-    "買い物": "warning",   # 黄
-    "趣味": "success",     # 緑
-    "スキル": "info",      # 水色
-    "予定": "danger",      # 赤
+    "仕事": "primary",
+    "買い物": "warning",
+    "趣味": "success",
+    "スキル": "info",
+    "予定": "danger",
 }
 
 def get_db_connection():
@@ -28,16 +50,13 @@ def get_db_connection():
 
 def init_db():
     conn = get_db_connection()
-
     conn.execute("""
     CREATE TABLE IF NOT EXISTS categories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE
     )
     """)
-
     conn.execute("INSERT OR IGNORE INTO categories (name) VALUES ('仕事'), ('買い物'), ('趣味'), ('スキル'), ('予定')")
-
     conn.execute("""
     CREATE TABLE IF NOT EXISTS tasks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,38 +67,29 @@ def init_db():
         FOREIGN KEY(category_id) REFERENCES categories(id)
     )
     """)
-
     conn.commit()
     conn.close()
 
-
 @app.route("/")
+@requires_auth
 def index():
     keyword = request.args.get("q", "").strip()
     conn = get_db_connection()
-
-    # タスクをカテゴリ名付きで取得
     tasks = conn.execute("""
         SELECT tasks.*, categories.name AS category_name
         FROM tasks LEFT JOIN categories ON tasks.category_id = categories.id
         ORDER BY created_at DESC
     """).fetchall()
-
-    # カテゴリ一覧取得（フォーム用）
     categories = conn.execute("SELECT * FROM categories").fetchall()
     conn.close()
-
-    # 色情報をテンプレートに渡す
     return render_template("index.html", tasks=tasks, categories=categories, keyword=keyword, category_colors=CATEGORY_COLORS)
 
-
-
 @app.route("/add", methods=["POST"])
+@requires_auth
 def add():
     task = request.form["task"]
     category_id = request.form.get("category_id")
     if task:
-        JST = timezone(timedelta(hours=9))  # 日本時間設定
         now = datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
         conn = get_db_connection()
         conn.execute(
@@ -90,9 +100,8 @@ def add():
         conn.close()
     return redirect(url_for("index"))
 
-
-
 @app.route("/delete/<int:task_id>")
+@requires_auth
 def delete(task_id):
     conn = get_db_connection()
     conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
@@ -101,6 +110,7 @@ def delete(task_id):
     return redirect(url_for("index"))
 
 @app.route("/toggle/<int:task_id>")
+@requires_auth
 def toggle(task_id):
     conn = get_db_connection()
     task = conn.execute("SELECT is_done FROM tasks WHERE id = ?", (task_id,)).fetchone()
@@ -112,6 +122,7 @@ def toggle(task_id):
     return redirect(url_for("index"))
 
 @app.route('/edit/<int:task_id>', methods=['GET', 'POST'])
+@requires_auth
 def edit(task_id):
     conn = get_db_connection()
     task = conn.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
@@ -125,10 +136,15 @@ def edit(task_id):
         conn.close()
         return redirect(url_for('index'))
 
+@app.route("/protected")
+@requires_auth
+def protected():
+    return "これは認証されたユーザーだけが見られるページです"
+
+
     conn.close()
     return render_template('edit.html', task=task, categories=categories)
 
-# ✅ 起動処理は最後に1回だけ
 if __name__ == "__main__":
     init_db()
     app.run(debug=True, use_reloader=False)
