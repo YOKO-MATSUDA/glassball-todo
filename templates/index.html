@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>備忘録</title>
+  <!-- BootstrapのCSSを読み込み -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <!-- Bootstrapアイコンを読み込み -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body class="bg-light">
+
+  <div class="container py-4">
+     <h2 class="text-center py-2 bg-primary-subtle text-primary mb-5"><span class="fs-5"><i class="bi bi-cake2 me-3"></i></span>memorandum<span class="fs-5"><i class="bi bi-cake2 ms-3"></i></span></h2>
+  
+</h1>
+
+
+
+<form action="{{ url_for('add') }}" method="post" class="row g-0 mb-3">
+  <div class="col-7">
+    <input type="text" name="task" class="form-control" placeholder="タスクを入力" required>
+  </div>
+  <div class="col-3">
+    <select name="category_id" class="form-select">
+      <option value="">カテゴリを選択</option>
+      {% for cat in categories %}
+        <option value="{{ cat.id }}">{{ cat.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-2">
+    <button type="submit" class="btn btn-primary w-100">追加</button>
+  </div>
+</form>
+
+
+
+
+<form method="get" action="{{ url_for('index') }}" class="mb-3">
+  <div class="input-group">
+    <input type="text" name="q" class="form-control" placeholder="検索" value="{{ request.args.get('q', '') }}">
+    <button type="submit" class="btn btn-outline-secondary">検索</button>
+  </div>
+</form>
+
+
+
+{% if sort == 'new' %}
+    <strong>新しい順</strong> |
+    <a href="{{ url_for('index', sort='old') }}">古い順</a>
+{% else %}
+    <a href="{{ url_for('index', sort='new') }}">新しい順</a> |
+    <strong>古い順</strong>
+{% endif %}
+
+<ul class="list-group">
+  {% for task in tasks %}
+    <li class="list-group-item d-flex justify-content-between align-items-center
+        {% if task.is_done %}list-group-item-secondary{% endif %}">
+
+      <div class="d-flex align-items-center">
+        <!-- チェックボックス化 -->
+        <form method="get" action="{{ url_for('toggle', task_id=task.id) }}" style="margin:0; padding:0;">
+          <input
+            type="checkbox"
+            onchange="this.form.submit()"
+            {% if task.is_done %}checked{% endif %}
+          >
+        </form>
+
+        <span class="ms-2" style="text-decoration: {{ 'line-through' if task.is_done else 'none' }}">
+          {{ task.content }}
+          {% if task.category_name %}
+            <span class="badge bg-{{ category_colors.get(task.category_name, 'secondary') }} ms-2">
+              {{ task.category_name }}
+            </span>
+          {% endif %}
+        </span>
+
+        <small class="text-muted ms-3">{{ task.created_at }}</small>
+      </div>
+
+      <div>
+        <a href="{{ url_for('edit', task_id=task.id) }}" class="btn btn-sm btn-outline-secondary me-2">編集</a>
+        <a href="{{ url_for('delete', task_id=task.id) }}" class="btn btn-sm btn-outline-danger"
+           onclick="return confirm('本当に削除しますか？');">削除</a>
+      </div>
+    </li>
+  {% endfor %}
+</ul>
+
+
+
+
+
+
+  </div>
+
+</body>
+</html>
