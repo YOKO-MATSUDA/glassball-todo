@@ -1,33 +1,20 @@
 import os
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, Response
-#ポスグレ用　↓
-#import psycopg2
-#import psycopg2.extras
-import mysql.connector
-from mysql.connector import Error
+import psycopg2
+import psycopg2.extras
 from datetime import datetime, timedelta, timezone
-from dotenv import load_dotenv
-
-load_dotenv()
-
-print("DB_USER:", os.environ.get("DB_USER"))  # 確認用
-
-# 日本時間（UTC+9）
-JST = timezone(timedelta(hours=9))
 
 app = Flask(__name__)
 
-# 環境変数からデータベースURLとベーシック認証情報を取得
+# 日本時間
+JST = timezone(timedelta(hours=9))
+
+# 環境変数から取得（Renderでは自動で設定される）
 DATABASE_URL = os.environ.get("DATABASE_URL")
 USERNAME = os.environ.get("BASIC_AUTH_USERNAME")
 PASSWORD = os.environ.get("BASIC_AUTH_PASSWORD")
 
-print("DATABASE_URL:", repr(DATABASE_URL))
-print("TYPE:", type(DATABASE_URL))
-
-
-# カテゴリーの色
 CATEGORY_COLORS = {
     "仕事": "primary",
     "買い物": "warning",
@@ -36,15 +23,11 @@ CATEGORY_COLORS = {
     "予定": "danger",
 }
 
-# 認証チェック
 def check_auth(username, password):
     return username == USERNAME and password == PASSWORD
 
 def authenticate():
-    return Response(
-        '認証が必要です。IDとパスワードを入力してください。', 401,
-        {'WWW-Authenticate': 'Basic realm="Login Required"'}
-    )
+    return Response('認証が必要です。', 401, {'WWW-Authenticate': 'Basic realm="Login Required"'})
 
 def requires_auth(f):
     @wraps(f)
@@ -55,74 +38,34 @@ def requires_auth(f):
         return f(*args, **kwargs)
     return decorated
 
-# PostgreSQL 接続関数
-#def get_db_connection():
-#    return psycopg2.connect(dsn=DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
-
-# MySQL 接続関数
 def get_db_connection():
-    return mysql.connector.connect(
-        host=os.environ.get("DB_HOST", "localhost"),
-        user=os.environ.get("DB_USER"),
-        password=os.environ.get("DB_PASSWORD"),
-        database=os.environ.get("DB_NAME"),   
-        charset='utf8mb4'
-    )
+    return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
 
-
-
-# DB初期化(ポスグレ版)
-# def init_db():
-#   with get_db_connection() as conn:
-#        with conn.cursor() as cur:
-#             cur.execute("""
-#                 CREATE TABLE IF NOT EXISTS categories (
-#                     id SERIAL PRIMARY KEY,
-#                     name TEXT NOT NULL UNIQUE
-#                 );
-#             """)
-#             cur.execute("""
-#                 INSERT INTO categories (name)
-#                 VALUES ('仕事'), ('買い物'), ('趣味'), ('スキル'), ('予定')
-#                 ON CONFLICT DO NOTHING;
-#             """)
-#             cur.execute("""
-#                 CREATE TABLE IF NOT EXISTS tasks (
-#                     id SERIAL PRIMARY KEY,
-#                     content TEXT NOT NULL,
-#                     category_id INTEGER REFERENCES categories(id),
-#                     created_at TIMESTAMP NOT NULL,
-#                     is_done BOOLEAN DEFAULT FALSE
-#                 );
-#             """)
-#             conn.commit()
-
-# DB初期化(Mysql版)
 def init_db():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS categories (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE
-        );
-    """)
-    cur.execute("""
-        INSERT IGNORE INTO categories (name)
-        VALUES ('仕事'), ('買い物'), ('趣味'), ('スキル'), ('予定');
-    """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            content TEXT NOT NULL,
-            category_id INT,
-            created_at DATETIME NOT NULL,
-            is_done BOOLEAN DEFAULT FALSE,
-            FOREIGN KEY (category_id) REFERENCES categories(id)
-        );
-    """)
-    conn.commit()
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS categories (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE
+                );
+            """)
+            cur.execute("""
+                INSERT INTO categories (name)
+                VALUES ('仕事'), ('買い物'), ('趣味'), ('スキル'), ('予定')
+                ON CONFLICT DO NOTHING;
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS tasks (
+                    id SERIAL PRIMARY KEY,
+                    content TEXT NOT NULL,
+                    category_id INTEGER REFERENCES categories(id),
+                    created_at TIMESTAMP NOT NULL,
+                    is_done BOOLEAN DEFAULT FALSE
+                );
+            """)
+            conn.commit()
+
     cur.close()
     conn.close()
 
@@ -210,5 +153,11 @@ def edit(task_id):
 def protected():
     return "これは認証されたユーザーだけが見られるページです"
 
+# if __name__ == "__main__":
+
+#     app.run(debug=True, use_reloader=False)  # init_db() は削除（別スクリプト化推奨）
+
 if __name__ == "__main__":
-    app.run(debug=True, use_reloader=False)  # init_db() は削除（別スクリプト化推奨）
+    init_db()  # ← この行を一時的に追加
+    app.run(debug=True, use_reloader=False)
+
