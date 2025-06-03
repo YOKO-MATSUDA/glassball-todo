@@ -118,7 +118,7 @@ def delete(task_id):
 @requires_auth
 def toggle(task_id):
     with get_db_connection() as conn:
-        with conn.cursor(dictionary=True) as cur:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("SELECT is_done FROM tasks WHERE id = %s", (task_id,))
             task = cur.fetchone()
             if task:
@@ -126,6 +126,7 @@ def toggle(task_id):
                 cur.execute("UPDATE tasks SET is_done = %s WHERE id = %s", (new_status, task_id))
                 conn.commit()
     return redirect(url_for("index"))
+
 
 @app.route("/edit/<int:task_id>", methods=["GET", "POST"])
 @requires_auth
