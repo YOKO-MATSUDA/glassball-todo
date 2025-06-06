@@ -75,30 +75,19 @@ def init_db():
 @requires_auth
 def index():
     keyword = request.args.get("q", "").strip()
-
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            if keyword:
-                cur.execute("""
-                    SELECT tasks.*, categories.name AS category_name
-                    FROM tasks
-                    LEFT JOIN categories ON tasks.category_id = categories.id
-                    WHERE tasks.content ILIKE %s OR categories.name ILIKE %s
-                    ORDER BY created_at DESC
-                """, (f"%{keyword}%", f"%{keyword}%"))
-            else:
-                cur.execute("""
-                    SELECT tasks.*, categories.name AS category_name
-                    FROM tasks LEFT JOIN categories ON tasks.category_id = categories.id
-                    ORDER BY created_at DESC
-                """)
+            cur.execute("""
+                SELECT tasks.*, categories.name AS category_name
+                FROM tasks LEFT JOIN categories ON tasks.category_id = categories.id
+                ORDER BY created_at DESC
+            """)
             tasks = cur.fetchall()
 
             cur.execute("SELECT * FROM categories ORDER BY id")
             categories = cur.fetchall()
 
     return render_template("index.html", tasks=tasks, categories=categories, keyword=keyword, category_colors=CATEGORY_COLORS)
-
 
 @app.route("/add", methods=["POST"])
 @requires_auth
